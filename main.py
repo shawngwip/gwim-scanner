@@ -7,13 +7,17 @@ from datetime import datetime
 from config import MYSQL_CONFIG, DEVICE_LINE, DEVICE_ID
 import simpleaudio as sa
 import sys
-from evdev import InputDevice, categorize, ecodes
+from evdev import InputDevice, list_devices, categorize, ecodes
 
 # --- 日志重定向 ---
-log_path = "/home/pi/Desktop/gwim_log.txt"
-sys.stdout = open(log_path, "a")
-sys.stderr = sys.stdout
-print("🔁 Script started")
+try:
+    log_path = "/home/pi/Desktop/gwim_log.txt"
+    sys.stdout = open(log_path, "a", buffering=1)
+    sys.stderr = sys.stdout
+    print("🔁 Script started (log ready)")
+except Exception as e:
+    with open("/home/pi/Desktop/gwim_fallback.txt", "a") as f:
+        f.write(f"Logging failed: {e}\n")
 
 # --- 音效播放函数 ---
 def play_success():
@@ -37,7 +41,17 @@ def safe_int(value):
     except:
         return None
 
-# --- 初始化 ---
+# --- 自动识别扫码器设备 ---
+def auto_find_device():
+    for path in list_devices():
+        dev = InputDevice(path)
+        if "Barcode" in dev.name or "Scanner" in dev.name or "USB" in dev.name:
+            print(f"✅ 自动识别扫码器: {dev.name} @ {path}")
+            return path
+    print("❌ 没有找到扫码器设备，请检查连接")
+    return None
+
+# --- 初始化变量 ---
 RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}
 SCAN_INTERVAL = 1.5
 CSV_FOLDER = "logs"
@@ -168,8 +182,8 @@ def upload_from_csv():
 
     threading.Timer(300, upload_from_csv).start()
 
-# --- 扫码器监听 ---
-def listen_to_barcode(device_path='/dev/input/event0'):
+# --- 扫码监听 ---
+def listen_to_barcode(device_path):
     global current_batch, current_muf, template_code, muf_info, last_barcode, last_scan_time
 
     print(f"🧭 正在监听扫码器输入: {device_path}")
@@ -224,15 +238,17 @@ def listen_to_barcode(device_path='/dev/input/event0'):
                 barcode = ""
 
             elif key.startswith('KEY_') and len(key) == 5:
-                barcode += key[-1]  # 'KEY_1' -> '1'
+                barcode += key[-1]
             elif key.startswith('KEY_KP'):
-                barcode += key[-1]  # Keypad keys
+                barcode += key[-1]
             elif key == 'KEY_MINUS':
                 barcode += '-'
-            else:
-                pass  # 不识别的键
 
-# --- 启动 ---
+# --- 主程序 ---
 if __name__ == '__main__':
     upload_from_csv()
-    listen_to_barcode("/dev/input/event12")  # 根据你设备情况修改路径
+    device_path = auto_find_device()
+    if device_path:
+        listen_to_barcode(device_path)
+    else:
+        print("❌ 未检测到扫码器，程序终止")
