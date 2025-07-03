@@ -177,6 +177,14 @@ def upload_from_csv():
 def normalize_barcode(code):
     return code.replace("-", "").replace("_", "").strip().upper()
 
+# --- 判断是否为 RESET 条码 ---
+def is_reset_code(barcode):
+    normalized = normalize_barcode(barcode)
+    for reset in RESET_CODES:
+        if normalize_barcode(reset) == normalized:
+            return True
+    return False
+
 # --- 扫码监听 ---
 def on_key(event):
     global barcode_buffer, last_barcode, last_scan_time
@@ -184,19 +192,17 @@ def on_key(event):
 
     if event.name == "enter":
         barcode = barcode_buffer.strip()
-        barcode_upper = normalize_barcode(barcode)
+        normalized_barcode = normalize_barcode(barcode)
         barcode_buffer = ""
 
-        print(f"📥 扫描到条码: {barcode} → 标准化为: {barcode_upper}")
+        print(f"📥 扫描到条码: {barcode} → 标准化为: {normalized_barcode}")
 
         now = datetime.now()
 
         last_barcode = barcode
         last_scan_time = time.time()
 
-        # 判断是否为 RESET 条码
-        reset_codes_normalized = {normalize_barcode(code) for code in RESET_CODES}
-        if barcode_upper in reset_codes_normalized:
+        if is_reset_code(barcode):
             current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
             current_muf = None
             template_code = None
