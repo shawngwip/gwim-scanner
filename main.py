@@ -173,28 +173,30 @@ def upload_from_csv():
 
     threading.Timer(300, upload_from_csv).start()
 
-# --- 扫码监听（keyboard 模块） ---
+# --- 条码标准化函数 ---
+def normalize_barcode(code):
+    return code.replace("-", "").replace("_", "").strip().upper()
+
+# --- 扫码监听 ---
 def on_key(event):
     global barcode_buffer, last_barcode, last_scan_time
     global current_batch, current_muf, template_code, muf_info
 
     if event.name == "enter":
         barcode = barcode_buffer.strip()
-        barcode_upper = barcode.upper()
+        barcode_upper = normalize_barcode(barcode)
         barcode_buffer = ""
 
-        print(f"📥 扫描到条码: {barcode}")
+        print(f"📥 扫描到条码: {barcode} → 标准化为: {barcode_upper}")
 
         now = datetime.now()
-        # 暂时关闭重复条码抑制，便于测试
-        # if barcode == last_barcode and (time.time() - last_scan_time) < SCAN_INTERVAL:
-        #     print("⚠️ 重复条码，忽略")
-        #     return
 
         last_barcode = barcode
         last_scan_time = time.time()
 
-        if barcode_upper in RESET_CODES:
+        # 判断是否为 RESET 条码
+        reset_codes_normalized = {normalize_barcode(code) for code in RESET_CODES}
+        if barcode_upper in reset_codes_normalized:
             current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
             current_muf = None
             template_code = None
@@ -203,15 +205,19 @@ def on_key(event):
         elif not current_batch:
             print("⚠️ 请先扫描 RESET 开始批次")
         elif current_muf is None:
-            conn = pymysql.connect(**MYSQL_CONFIG, cursorclass=pymysql.cursors.DictCursor)
-            cursor = conn.cursor()
-            muf_info = fetch_muf_info(cursor, barcode)
-            conn.close()
-            if muf_info:
-                current_muf = barcode
-                print(f"✅ MUF 识别成功: {current_muf}")
-            else:
-                print(f"❌ MUF 不存在于数据库: {barcode}")
+            try:
+                conn = pymysql.connect(**MYSQL_CONFIG, cursorclass=pymysql.cursors.DictCursor)
+                cursor = conn.cursor()
+                muf_info = fetch_muf_info(cursor, barcode)
+                conn.close()
+                if muf_info:
+                    current_muf = barcode
+                    print(f"✅ MUF 识别成功: {current_muf}")
+                else:
+                    print(f"❌ MUF 不存在于数据库: {barcode}")
+                    play_error()
+            except Exception as e:
+                print(f"⚠️ 数据库连接失败: {e}")
                 play_error()
         elif template_code is None:
             template_code = barcode
@@ -227,6 +233,7 @@ def on_key(event):
         barcode_buffer += event.name
     elif event.name == "minus":
         barcode_buffer += "-"
+
 
 # --- 主程序入口 ---
 if __name__ == '__main__':
