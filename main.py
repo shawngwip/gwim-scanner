@@ -42,7 +42,7 @@ def safe_int(value):
         return None
 
 # --- 初始化变量 ---
-RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}
+RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}  # 全部大写
 SCAN_INTERVAL = 1.5
 CSV_FOLDER = "logs"
 os.makedirs(CSV_FOLDER, exist_ok=True)
@@ -180,19 +180,21 @@ def on_key(event):
 
     if event.name == "enter":
         barcode = barcode_buffer.strip()
+        barcode_upper = barcode.upper()
         barcode_buffer = ""
 
         print(f"📥 扫描到条码: {barcode}")
-        now = datetime.now()
 
-        if barcode == last_barcode and (time.time() - last_scan_time) < SCAN_INTERVAL:
-            print("⚠️ 重复条码，忽略")
-            return
+        now = datetime.now()
+        # 暂时关闭重复条码抑制，便于测试
+        # if barcode == last_barcode and (time.time() - last_scan_time) < SCAN_INTERVAL:
+        #     print("⚠️ 重复条码，忽略")
+        #     return
 
         last_barcode = barcode
         last_scan_time = time.time()
 
-        if barcode in RESET_CODES:
+        if barcode_upper in RESET_CODES:
             current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
             current_muf = None
             template_code = None
