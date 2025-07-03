@@ -7,7 +7,7 @@ from datetime import datetime
 from config import MYSQL_CONFIG, DEVICE_LINE, DEVICE_ID
 import simpleaudio as sa
 import sys
-from evdev import InputDevice, list_devices, categorize, ecodes
+import keyboard
 
 # --- 日志重定向 ---
 try:
@@ -41,16 +41,6 @@ def safe_int(value):
     except:
         return None
 
-# --- 自动识别扫码器设备 ---
-def auto_find_device():
-    for path in list_devices():
-        dev = InputDevice(path)
-        if "Barcode" in dev.name or "Scanner" in dev.name or "USB" in dev.name:
-            print(f"✅ 自动识别扫码器: {dev.name} @ {path}")
-            return path
-    print("❌ 没有找到扫码器设备，请检查连接")
-    return None
-
 # --- 初始化变量 ---
 RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}
 SCAN_INTERVAL = 1.5
@@ -63,6 +53,7 @@ template_code = None
 muf_info = None
 last_scan_time = 0
 last_barcode = None
+barcode_buffer = ""
 
 csv_lock = threading.Lock()
 
@@ -182,73 +173,62 @@ def upload_from_csv():
 
     threading.Timer(300, upload_from_csv).start()
 
-# --- 扫码监听 ---
-def listen_to_barcode(device_path):
-    global current_batch, current_muf, template_code, muf_info, last_barcode, last_scan_time
+# --- 扫码监听（keyboard 模块） ---
+def on_key(event):
+    global barcode_buffer, last_barcode, last_scan_time
+    global current_batch, current_muf, template_code, muf_info
 
-    print(f"🧭 正在监听扫码器输入: {device_path}")
-    dev = InputDevice(device_path)
-    barcode = ""
+    if event.name == "enter":
+        barcode = barcode_buffer.strip()
+        barcode_buffer = ""
 
-    for event in dev.read_loop():
-        if event.type == ecodes.EV_KEY:
-            key_event = categorize(event)
-            if key_event.keystate != 1:
-                continue
-            key = key_event.keycode
+        print(f"📥 扫描到条码: {barcode}")
+        now = datetime.now()
 
-            if key == 'KEY_ENTER':
-                print(f"📥 扫描到条码: {barcode}")
-                now = datetime.now()
-                if barcode == last_barcode and (time.time() - last_scan_time) < SCAN_INTERVAL:
-                    barcode = ""
-                    continue
-                last_barcode = barcode
-                last_scan_time = time.time()
+        if barcode == last_barcode and (time.time() - last_scan_time) < SCAN_INTERVAL:
+            print("⚠️ 重复条码，忽略")
+            return
 
-                if barcode in RESET_CODES:
-                    current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
-                    current_muf = None
-                    template_code = None
-                    muf_info = None
-                    print(f"🔄 RESET 扫码，新批次开始: {current_batch}")
-                elif not current_batch:
-                    print("⚠️ 请先扫描 RESET 开始批次")
-                elif current_muf is None:
-                    conn = pymysql.connect(**MYSQL_CONFIG, cursorclass=pymysql.cursors.DictCursor)
-                    cursor = conn.cursor()
-                    muf_info = fetch_muf_info(cursor, barcode)
-                    conn.close()
-                    if muf_info:
-                        current_muf = barcode
-                        print(f"✅ MUF 识别成功: {current_muf}")
-                    else:
-                        print(f"❌ MUF 不存在于数据库: {barcode}")
-                        play_error()
-                elif template_code is None:
-                    template_code = barcode
-                    print(f"🧾 模板条码设定为: {template_code}")
-                    process_and_store(barcode, muf_info)
-                elif barcode != template_code:
-                    print(f"❌ 错误条码: {barcode} ≠ {template_code}，不写入数据库")
-                    play_error()
-                else:
-                    process_and_store(barcode, muf_info)
+        last_barcode = barcode
+        last_scan_time = time.time()
 
-                barcode = ""
+        if barcode in RESET_CODES:
+            current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
+            current_muf = None
+            template_code = None
+            muf_info = None
+            print(f"🔄 RESET 扫码，新批次开始: {current_batch}")
+        elif not current_batch:
+            print("⚠️ 请先扫描 RESET 开始批次")
+        elif current_muf is None:
+            conn = pymysql.connect(**MYSQL_CONFIG, cursorclass=pymysql.cursors.DictCursor)
+            cursor = conn.cursor()
+            muf_info = fetch_muf_info(cursor, barcode)
+            conn.close()
+            if muf_info:
+                current_muf = barcode
+                print(f"✅ MUF 识别成功: {current_muf}")
+            else:
+                print(f"❌ MUF 不存在于数据库: {barcode}")
+                play_error()
+        elif template_code is None:
+            template_code = barcode
+            print(f"🧾 模板条码设定为: {template_code}")
+            process_and_store(barcode, muf_info)
+        elif barcode != template_code:
+            print(f"❌ 错误条码: {barcode} ≠ {template_code}，不写入数据库")
+            play_error()
+        else:
+            process_and_store(barcode, muf_info)
 
-            elif key.startswith('KEY_') and len(key) == 5:
-                barcode += key[-1]
-            elif key.startswith('KEY_KP'):
-                barcode += key[-1]
-            elif key == 'KEY_MINUS':
-                barcode += '-'
+    elif len(event.name) == 1:
+        barcode_buffer += event.name
+    elif event.name == "minus":
+        barcode_buffer += "-"
 
-# --- 主程序 ---
+# --- 主程序入口 ---
 if __name__ == '__main__':
     upload_from_csv()
-    device_path = auto_find_device()
-    if device_path:
-        listen_to_barcode(device_path)
-    else:
-        print("❌ 未检测到扫码器，程序终止")
+    print("🧭 使用 keyboard 模块监听扫码…")
+    keyboard.on_press(on_key)
+    keyboard.wait()
