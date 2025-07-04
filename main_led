@@ -9,7 +9,7 @@ import sys
 import keyboard
 import RPi.GPIO as GPIO
 
-# --- Debug mode switch ---
+# --- Debug mode ---
 DEBUG_MODE = True
 
 def debug(msg):
@@ -17,14 +17,13 @@ def debug(msg):
         print(f"[DEBUG] {msg}")
 
 # --- GPIO Setup ---
-LED_SYSTEM = 17  # System status LED: always ON
-LED_ALERT = 27   # Alert LED: blink for success/error
-
+LED_SYSTEM = 17
+LED_ALERT = 27
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 GPIO.setup(LED_SYSTEM, GPIO.OUT)
 GPIO.setup(LED_ALERT, GPIO.OUT)
-GPIO.output(LED_SYSTEM, GPIO.HIGH)  # Turn on system LED
+GPIO.output(LED_SYSTEM, GPIO.HIGH)
 
 def led_blink(times):
     for _ in range(times):
@@ -33,7 +32,7 @@ def led_blink(times):
         GPIO.output(LED_ALERT, GPIO.LOW)
         time.sleep(0.2)
 
-# --- Redirect stdout/stderr to log file ---
+# --- Logging ---
 try:
     log_path = "/home/pi/gwim-scanner/gwim_log.txt"
     sys.stdout = open(log_path, "a", buffering=1)
@@ -43,7 +42,7 @@ except Exception as e:
     with open("/home/pi/gwim-scanner/gwim_fallback.txt", "a") as f:
         f.write(f"Logging failed: {e}\n")
 
-# --- Helper functions ---
+# --- Barcode utils ---
 def safe_int(value):
     try:
         return int(value)
@@ -60,26 +59,23 @@ def normalize_barcode(code):
             .upper()
     )
 
-# --- Global variables ---
+# --- Globals ---
 CSV_FOLDER = "/home/pi/gwim-scanner/logs"
 os.makedirs(CSV_FOLDER, exist_ok=True)
 
 RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}
-SCAN_INTERVAL = 1.5
 
 current_batch = None
 current_muf = None
 template_code = None
 muf_info = None
-last_scan_time = 0
-last_barcode = None
 barcode_buffer = ""
 
 csv_lock = threading.Lock()
 
-# --- Database operations ---
+# --- DB functions ---
 def fetch_muf_info(cursor, muf_code):
-    debug(f"Querying table 'main' for muf_no = '{muf_code}'")
+    debug(f"Querying DB for muf_no = '{muf_code}'")
     cursor.execute("SELECT * FROM main WHERE muf_no = %s", (muf_code,))
     return cursor.fetchone()
 
@@ -96,16 +92,14 @@ def write_to_csv(data, muf_no, uploaded=0):
                     "scanned_at", "scanned_by", "is_uploaded"
                 ])
             writer.writerow(data + (uploaded,))
-        debug(f"📂 Written to CSV: {filename} (uploaded={uploaded})")
+        debug(f"📂 CSV written: {filename} (uploaded={uploaded})")
 
 def process_and_store(barcode, muf_info):
     pack_per_ctn = safe_int(muf_info["pack_per_ctn"])
     ctn_count = 1
     actual_pack = pack_per_ctn * ctn_count if pack_per_ctn is not None else None
-
     now = datetime.now()
     timestamp = now.strftime('%Y-%m-%d %H:%M:%S')
-
     data = (
         current_muf,
         DEVICE_LINE,
@@ -119,7 +113,6 @@ def process_and_store(barcode, muf_info):
         timestamp,
         DEVICE_ID
     )
-
     try:
         conn = pymysql.connect(**MYSQL_CONFIG)
         cursor = conn.cursor()
@@ -132,24 +125,23 @@ def process_and_store(barcode, muf_info):
         cursor.execute(sql, data)
         conn.commit()
         conn.close()
-        debug("✅ DB insert successful")
+        debug("✅ DB insert OK")
         write_to_csv(data, current_muf, uploaded=1)
         led_blink(1)
     except Exception as e:
-        debug(f"⚠️ DB insert failed. Cached locally: {e}")
+        debug(f"⚠️ DB insert failed: {e}")
         write_to_csv(data, current_muf, uploaded=0)
         led_blink(1)
 
-# --- Upload cached CSV every 5 minutes ---
+# --- Upload cached CSVs ---
 def upload_from_csv():
-    debug("⏫ Attempting to upload cached CSV data...")
+    debug("⏫ Checking cached CSVs...")
     for file in os.listdir(CSV_FOLDER):
         if not file.endswith(".csv"):
             continue
         path = os.path.join(CSV_FOLDER, file)
         rows = []
         updated = False
-
         with csv_lock:
             with open(path, 'r', newline='') as f:
                 reader = list(csv.reader(f))
@@ -158,10 +150,8 @@ def upload_from_csv():
                     if len(row) < 12 or row[-1] == "1":
                         continue
                     rows.append(row)
-
         if not rows:
             continue
-
         try:
             conn = pymysql.connect(**MYSQL_CONFIG)
             cursor = conn.cursor()
@@ -178,7 +168,6 @@ def upload_from_csv():
             updated = True
         except Exception as e:
             debug(f"⚠️ Upload failed: {e}")
-
         if updated:
             with csv_lock:
                 with open(path, 'r', newline='') as f:
@@ -190,77 +179,70 @@ def upload_from_csv():
                 with open(path, 'w', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerows(reader)
-                debug(f"✅ Upload complete and marked: {path}")
-
+                debug(f"✅ Uploaded & marked: {path}")
     threading.Timer(300, upload_from_csv).start()
 
-# --- Check for RESET barcode ---
+# --- Check for RESET code ---
 def is_reset_code(barcode):
     normalized = normalize_barcode(barcode)
     return normalized in {normalize_barcode(r) for r in RESET_CODES}
 
-# --- Barcode scan listener ---
+# --- Barcode scan event ---
 def on_key(event):
-    global barcode_buffer, last_barcode, last_scan_time
-    global current_batch, current_muf, template_code, muf_info
+    global barcode_buffer, current_batch, current_muf, template_code, muf_info
 
     if event.name == "enter":
-        barcode = barcode_buffer.strip()
-        normalized_barcode = normalize_barcode(barcode)
+        raw = barcode_buffer.strip()
         barcode_buffer = ""
+        normalized = normalize_barcode(raw)
 
-        debug(f"📥 Scanned barcode: '{barcode}' → normalized: '{normalized_barcode}'")
+        debug(f"📥 Scanned: '{raw}' → '{normalized}'")
 
-        now = datetime.now()
-        last_barcode = barcode
-        last_scan_time = time.time()
-
-        if is_reset_code(barcode):
-            current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
+        if is_reset_code(normalized):
+            current_batch = f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             current_muf = None
             template_code = None
             muf_info = None
-            debug(f"🔄 RESET scanned. New batch: {current_batch}")
+            debug(f"🔄 RESET: {current_batch}")
         elif not current_batch:
-            debug("⚠️ Please scan RESET first.")
+            debug("⚠️ Scan RESET first")
             led_blink(3)
         elif current_muf is None:
             try:
-                clean_barcode = normalized_barcode
                 conn = pymysql.connect(**MYSQL_CONFIG, cursorclass=pymysql.cursors.DictCursor)
                 cursor = conn.cursor()
-                muf_info = fetch_muf_info(cursor, clean_barcode)
+                muf_info = fetch_muf_info(cursor, normalized)
                 conn.close()
                 if muf_info:
-                    current_muf = clean_barcode
-                    debug(f"✅ MUF found: {current_muf}")
+                    current_muf = normalized
+                    debug(f"✅ MUF: {current_muf}")
                 else:
-                    debug(f"❌ MUF not found: {clean_barcode}")
+                    debug(f"❌ MUF not found: {normalized}")
                     led_blink(3)
             except Exception as e:
-                debug(f"⚠️ DB connection error: {e}")
+                debug(f"⚠️ DB Error: {e}")
                 led_blink(3)
         elif template_code is None:
-            if normalized_barcode == current_muf:
-                debug(f"⚠️ Duplicate MUF barcode: {normalized_barcode}, ignoring as template")
+            if normalized == current_muf:
+                debug(f"⚠️ Duplicate MUF: {normalized}, ignored as template")
                 return
-            template_code = normalized_barcode
-            debug(f"🧾 Template barcode set: {template_code}")
-            process_and_store(normalized_barcode, muf_info)
-        elif normalized_barcode != template_code:
-            debug(f"❌ Barcode mismatch: {normalized_barcode} ≠ {template_code}, skipped DB")
+            template_code = normalized
+            debug(f"🧾 Template set: {template_code}")
+            process_and_store(normalized, muf_info)
+        elif normalized != template_code:
+            debug(f"❌ Mismatch: {normalized} ≠ {template_code}")
             led_blink(3)
         else:
-            process_and_store(normalized_barcode, muf_info)
+            process_and_store(normalized, muf_info)
 
     elif len(event.name) == 1:
         barcode_buffer += event.name
     elif event.name == "minus":
         barcode_buffer += "-"
 
-# --- Program start ---
+# --- Start ---
 if __name__ == '__main__':
     upload_from_csv()
-    debug("🧭 Listening for barcode scan via keyboard...")
+    debug("🧭 Scanner ready. Listening for barcodes...")
     keyboard.on_press(on_key)
     keyboard.wait()
