@@ -63,13 +63,16 @@ def normalize_barcode(code):
 CSV_FOLDER = "/home/pi/gwim-scanner/logs"
 os.makedirs(CSV_FOLDER, exist_ok=True)
 
-RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}
+RESET_CODES = {"123456789"}
 
 current_batch = None
 current_muf = None
 template_code = None
 muf_info = None
 barcode_buffer = ""
+
+last_scanned_barcode = ""
+last_scanned_time = 0
 
 csv_lock = threading.Lock()
 
@@ -135,7 +138,7 @@ def process_and_store(barcode, muf_info):
 
 # --- Upload cached CSVs ---
 def upload_from_csv():
-    debug("⏫ Checking cached CSVs...")
+    debug("⬆️ Checking cached CSVs...")
     for file in os.listdir(CSV_FOLDER):
         if not file.endswith(".csv"):
             continue
@@ -190,11 +193,19 @@ def is_reset_code(barcode):
 # --- Barcode scan event ---
 def on_key(event):
     global barcode_buffer, current_batch, current_muf, template_code, muf_info
+    global last_scanned_barcode, last_scanned_time
 
     if event.name == "enter":
         raw = barcode_buffer.strip()
         barcode_buffer = ""
         normalized = normalize_barcode(raw)
+
+        now = time.time()
+        if normalized == last_scanned_barcode and now - last_scanned_time < 1.5:
+            debug(f"⏱️ Duplicate scan ignored: {normalized}")
+            return
+        last_scanned_barcode = normalized
+        last_scanned_time = now
 
         debug(f"📥 Scanned: '{raw}' → '{normalized}'")
 
@@ -243,6 +254,6 @@ def on_key(event):
 # --- Start ---
 if __name__ == '__main__':
     upload_from_csv()
-    debug("🧭 Scanner ready. Listening for barcodes...")
+    debug("🧱 Scanner ready. Listening for barcodes...")
     keyboard.on_press(on_key)
     keyboard.wait()
