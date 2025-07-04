@@ -49,7 +49,14 @@ def safe_int(value):
         return None
 
 def normalize_barcode(code):
-    return code.strip().replace("–", "-").replace("_", "-").upper()
+    return (
+        code.strip()
+            .replace(\"–\", \"-\")   # en dash
+            .replace(\"−\", \"-\")   # minus sign
+            .replace(\"—\", \"-\")   # em dash
+            .replace(\"_\", \"-\")   # 下划线统一转 dash
+            .upper()
+    )
 
 # --- 初始化变量 ---
 RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}
