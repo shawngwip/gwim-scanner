@@ -51,18 +51,19 @@ def safe_int(value):
 def normalize_barcode(code):
     return (
         code.strip()
-            .replace(\"–\", \"-\")   # en dash
-            .replace(\"−\", \"-\")   # minus sign
-            .replace(\"—\", \"-\")   # em dash
-            .replace(\"_\", \"-\")   # 下划线统一转 dash
+            .replace("–", "-")   # en dash
+            .replace("−", "-")   # minus
+            .replace("—", "-")   # em dash
+            .replace("_", "-")   # underscore
             .upper()
     )
 
 # --- 初始化变量 ---
+CSV_FOLDER = "/home/pi/Desktop/logs"
+os.makedirs(CSV_FOLDER, exist_ok=True)
+
 RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}
 SCAN_INTERVAL = 1.5
-CSV_FOLDER = "logs"
-os.makedirs(CSV_FOLDER, exist_ok=True)
 
 current_batch = None
 current_muf = None
@@ -93,7 +94,7 @@ def write_to_csv(data, muf_no, uploaded=0):
                     "scanned_at", "scanned_by", "is_uploaded"
                 ])
             writer.writerow(data + (uploaded,))
-        debug(f"📂 已写入 SD 卡缓存: {filename} (uploaded={uploaded})")
+        debug(f"📂 已写入 CSV: {filename} (uploaded={uploaded})")
 
 def process_and_store(barcode, muf_info):
     pack_per_ctn = safe_int(muf_info["pack_per_ctn"])
