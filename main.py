@@ -238,6 +238,9 @@ def on_key(event):
                 debug(f"⚠️ 数据库连接失败: {e}")
                 play_error()
         elif template_code is None:
+            if barcode == current_muf:
+                debug(f"⚠️ 重复扫描到 MUF 条码：{barcode}，忽略此条码作为模板")
+                return
             template_code = barcode
             debug(f"🧾 模板条码设定为: {template_code}")
             process_and_store(barcode, muf_info)
