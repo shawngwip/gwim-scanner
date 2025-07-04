@@ -9,39 +9,39 @@ import simpleaudio as sa
 import sys
 import keyboard
 
-# --- 调试模式开关 ---
+# --- Debug mode switch ---
 DEBUG_MODE = True
 
 def debug(msg):
     if DEBUG_MODE:
         print(f"[DEBUG] {msg}")
 
-# --- 日志重定向 ---
+# --- Redirect stdout/stderr to log file ---
 try:
-    log_path = "/home/pi/Desktop/gwim_log.txt"
+    log_path = "/home/pi/gwim-scanner/gwim_log.txt"
     sys.stdout = open(log_path, "a", buffering=1)
     sys.stderr = sys.stdout
     debug("🔁 Script started (log ready)")
 except Exception as e:
-    with open("/home/pi/Desktop/gwim_fallback.txt", "a") as f:
+    with open("/home/pi/gwim-scanner/gwim_fallback.txt", "a") as f:
         f.write(f"Logging failed: {e}\n")
 
-# --- 音效播放函数 ---
+# --- Sound playback functions ---
 def play_success():
     try:
         sa.WaveObject.from_wave_file("success.wav").play()
-        debug("🔊 success.wav 播放")
+        debug("🔊 success.wav played")
     except Exception as e:
-        debug(f"⚠️ 播放 success.wav 失败：{e}")
+        debug(f"⚠️ Failed to play success.wav: {e}")
 
 def play_error():
     try:
         sa.WaveObject.from_wave_file("error.wav").play()
-        debug("🔊 error.wav 播放")
+        debug("🔊 error.wav played")
     except Exception as e:
-        debug(f"⚠️ 播放 error.wav 失败：{e}")
+        debug(f"⚠️ Failed to play error.wav: {e}")
 
-# --- 工具函数 ---
+# --- Helper functions ---
 def safe_int(value):
     try:
         return int(value)
@@ -52,17 +52,17 @@ def normalize_barcode(code):
     return (
         code.strip()
             .replace("–", "-")   # en dash
-            .replace("−", "-")   # minus
+            .replace("−", "-")   # minus sign
             .replace("—", "-")   # em dash
             .replace("_", "-")   # underscore
             .upper()
     )
 
-# --- 初始化变量 ---
-CSV_FOLDER = "/home/pi/Desktop/logs"
+# --- Global variables ---
+CSV_FOLDER = "/home/pi/gwim-scanner/logs"
 os.makedirs(CSV_FOLDER, exist_ok=True)
 
-RESET_CODES = {"RESET", "RESET-001", "RESETGWIM"}
+RESET_CODES = {"123456789"}
 SCAN_INTERVAL = 1.5
 
 current_batch = None
@@ -75,9 +75,9 @@ barcode_buffer = ""
 
 csv_lock = threading.Lock()
 
-# --- 数据库操作 ---
+# --- Database operations ---
 def fetch_muf_info(cursor, muf_code):
-    debug(f"正在查询数据库 main 表，条件：muf_no = '{muf_code}'")
+    debug(f"Querying table 'main' for muf_no = '{muf_code}'")
     cursor.execute("SELECT * FROM main WHERE muf_no = %s", (muf_code,))
     return cursor.fetchone()
 
@@ -94,7 +94,7 @@ def write_to_csv(data, muf_no, uploaded=0):
                     "scanned_at", "scanned_by", "is_uploaded"
                 ])
             writer.writerow(data + (uploaded,))
-        debug(f"📂 已写入 CSV: {filename} (uploaded={uploaded})")
+        debug(f"📂 Written to CSV: {filename} (uploaded={uploaded})")
 
 def process_and_store(barcode, muf_info):
     pack_per_ctn = safe_int(muf_info["pack_per_ctn"])
@@ -130,17 +130,17 @@ def process_and_store(barcode, muf_info):
         cursor.execute(sql, data)
         conn.commit()
         conn.close()
-        debug("✅ DB 插入成功")
+        debug("✅ DB insert successful")
         write_to_csv(data, current_muf, uploaded=1)
         play_success()
     except Exception as e:
-        debug(f"⚠️ DB 插入失败，仅写入缓存：{e}")
+        debug(f"⚠️ DB insert failed. Cached locally: {e}")
         write_to_csv(data, current_muf, uploaded=0)
         play_success()
 
-# --- 上传 SD 卡数据 ---
+# --- Upload pending CSV data every 5 minutes ---
 def upload_from_csv():
-    debug("⏫ 尝试从 SD 卡上传数据…")
+    debug("⏫ Attempting to upload cached CSV data...")
     for file in os.listdir(CSV_FOLDER):
         if not file.endswith(".csv"):
             continue
@@ -175,7 +175,7 @@ def upload_from_csv():
             conn.close()
             updated = True
         except Exception as e:
-            debug(f"⚠️ 上传失败：{e}")
+            debug(f"⚠️ Upload failed: {e}")
 
         if updated:
             with csv_lock:
@@ -188,16 +188,16 @@ def upload_from_csv():
                 with open(path, 'w', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerows(reader)
-                debug(f"✅ 已上传并标记: {path}")
+                debug(f"✅ Upload complete and marked: {path}")
 
     threading.Timer(300, upload_from_csv).start()
 
-# --- 判断是否为 RESET 条码 ---
+# --- Check if barcode is a RESET code ---
 def is_reset_code(barcode):
     normalized = normalize_barcode(barcode)
     return normalized in {normalize_barcode(r) for r in RESET_CODES}
 
-# --- 扫码监听 ---
+# --- Barcode scan listener ---
 def on_key(event):
     global barcode_buffer, last_barcode, last_scan_time
     global current_batch, current_muf, template_code, muf_info
@@ -207,7 +207,7 @@ def on_key(event):
         normalized_barcode = normalize_barcode(barcode)
         barcode_buffer = ""
 
-        debug(f"📥 扫描到条码: '{barcode}' → 标准化为: '{normalized_barcode}'")
+        debug(f"📥 Scanned barcode: '{barcode}' → normalized: '{normalized_barcode}'")
 
         now = datetime.now()
         last_barcode = barcode
@@ -218,9 +218,9 @@ def on_key(event):
             current_muf = None
             template_code = None
             muf_info = None
-            debug(f"🔄 RESET 扫码，新批次开始: {current_batch}")
+            debug(f"🔄 RESET scanned. New batch: {current_batch}")
         elif not current_batch:
-            debug("⚠️ 请先扫描 RESET 开始批次")
+            debug("⚠️ Please scan RESET first.")
         elif current_muf is None:
             try:
                 clean_barcode = normalize_barcode(barcode)
@@ -230,22 +230,22 @@ def on_key(event):
                 conn.close()
                 if muf_info:
                     current_muf = clean_barcode
-                    debug(f"✅ MUF 识别成功: {current_muf}")
+                    debug(f"✅ MUF found: {current_muf}")
                 else:
-                    debug(f"❌ MUF 不存在于数据库: {clean_barcode}")
+                    debug(f"❌ MUF not found: {clean_barcode}")
                     play_error()
             except Exception as e:
-                debug(f"⚠️ 数据库连接失败: {e}")
+                debug(f"⚠️ DB connection error: {e}")
                 play_error()
         elif template_code is None:
             if barcode == current_muf:
-                debug(f"⚠️ 重复扫描到 MUF 条码：{barcode}，忽略此条码作为模板")
+                debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
                 return
             template_code = barcode
-            debug(f"🧾 模板条码设定为: {template_code}")
+            debug(f"🧾 Template barcode set: {template_code}")
             process_and_store(barcode, muf_info)
         elif barcode != template_code:
-            debug(f"❌ 错误条码: {barcode} ≠ {template_code}，不写入数据库")
+            debug(f"❌ Barcode mismatch: {barcode} ≠ {template_code}, skipped DB")
             play_error()
         else:
             process_and_store(barcode, muf_info)
@@ -255,9 +255,9 @@ def on_key(event):
     elif event.name == "minus":
         barcode_buffer += "-"
 
-# --- 主程序入口 ---
+# --- Main program entry ---
 if __name__ == '__main__':
     upload_from_csv()
-    debug("🧭 使用 keyboard 模块监听扫码…")
+    debug("🧭 Listening for barcode scan via keyboard...")
     keyboard.on_press(on_key)
     keyboard.wait()
