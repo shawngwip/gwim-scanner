@@ -140,7 +140,7 @@ def process_and_store(barcode, muf_info):
         write_to_csv(data, current_muf, uploaded=0)
         led_blink(1)
 
-# --- Upload pending CSV data every 5 minutes ---
+# --- Upload cached CSV every 5 minutes ---
 def upload_from_csv():
     debug("⏫ Attempting to upload cached CSV data...")
     for file in os.listdir(CSV_FOLDER):
@@ -194,7 +194,7 @@ def upload_from_csv():
 
     threading.Timer(300, upload_from_csv).start()
 
-# --- Check if barcode is a RESET code ---
+# --- Check for RESET barcode ---
 def is_reset_code(barcode):
     normalized = normalize_barcode(barcode)
     return normalized in {normalize_barcode(r) for r in RESET_CODES}
@@ -226,7 +226,7 @@ def on_key(event):
             led_blink(3)
         elif current_muf is None:
             try:
-                clean_barcode = normalize_barcode(barcode)
+                clean_barcode = normalized_barcode
                 conn = pymysql.connect(**MYSQL_CONFIG, cursorclass=pymysql.cursors.DictCursor)
                 cursor = conn.cursor()
                 muf_info = fetch_muf_info(cursor, clean_barcode)
@@ -241,24 +241,24 @@ def on_key(event):
                 debug(f"⚠️ DB connection error: {e}")
                 led_blink(3)
         elif template_code is None:
-            if barcode == current_muf:
-                debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
+            if normalized_barcode == current_muf:
+                debug(f"⚠️ Duplicate MUF barcode: {normalized_barcode}, ignoring as template")
                 return
-            template_code = barcode
+            template_code = normalized_barcode
             debug(f"🧾 Template barcode set: {template_code}")
-            process_and_store(barcode, muf_info)
-        elif barcode != template_code:
-            debug(f"❌ Barcode mismatch: {barcode} ≠ {template_code}, skipped DB")
+            process_and_store(normalized_barcode, muf_info)
+        elif normalized_barcode != template_code:
+            debug(f"❌ Barcode mismatch: {normalized_barcode} ≠ {template_code}, skipped DB")
             led_blink(3)
         else:
-            process_and_store(barcode, muf_info)
+            process_and_store(normalized_barcode, muf_info)
 
     elif len(event.name) == 1:
         barcode_buffer += event.name
     elif event.name == "minus":
         barcode_buffer += "-"
 
-# --- Main entry ---
+# --- Program start ---
 if __name__ == '__main__':
     upload_from_csv()
     debug("🧭 Listening for barcode scan via keyboard...")
