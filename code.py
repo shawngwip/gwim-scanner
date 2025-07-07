@@ -12,7 +12,12 @@ options.hardware_mapping = 'regular'
 
 matrix = RGBMatrix(options=options)
 font = graphics.Font()
-font.LoadFont("/home/pi/gwim-scanner/fonts/helvB12-vp.bdf")
+try:
+    font.LoadFont("/home/pi/gwim-scanner/fonts/helvB12-vp.bdf")
+    print("✅ Font loaded")
+except Exception as e:
+    print(f"❌ Font Load Error: {e}")
+    exit(1)
 
 def display_data(data):
     canvas = matrix.CreateFrameCanvas()
