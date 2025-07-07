@@ -2,6 +2,7 @@
 from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
 import time
 import requests
+import os
 
 options = RGBMatrixOptions()
 options.rows = 32
@@ -12,12 +13,17 @@ options.hardware_mapping = 'regular'
 
 matrix = RGBMatrix(options=options)
 font = graphics.Font()
-try:
-    font.LoadFont("/home/pi/gwim-scanner/fonts/helvB12-vp.bdf")
-    print("✅ Font loaded")
-except Exception as e:
-    print(f"❌ Font Load Error: {e}")
-    exit(1)
+
+font_path = "/home/pi/gwim-scanner/fonts/helvB12-vp.bdf"
+
+if not os.path.isfile(font_path):
+    print("❌ Font file not found!")
+else:
+    try:
+        font.LoadFont(font_path)
+        print("✅ Font loaded in code.py")
+    except Exception as e:
+        print(f"❌ Font Load Error: {e}")
 
 def display_data(data):
     canvas = matrix.CreateFrameCanvas()
