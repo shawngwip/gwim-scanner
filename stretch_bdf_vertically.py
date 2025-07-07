@@ -335,4 +335,9 @@ def reduce_dot_width_in_bdf(input_file, output_file, new_width=3):
     else:
         print("Dot character not found or unchanged.")
 
-safe_stretch_bdf_vertical_point("helvB12.bdf", "helvB12-vp.bdf", scale=1.5)
+if __name__ == "__main__":
+    safe_stretch_bdf_vertical_point(
+        "fonts/helvB12.bdf",
+        "fonts/helvB12-vp.bdf",
+        scale=1.5
+    )
