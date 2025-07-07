@@ -1,23 +1,21 @@
-from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+from rgbmatrix import RGBMatrix, RGBMatrixOptions
 import time
 
-# 配置选项
 options = RGBMatrixOptions()
 options.rows = 32
 options.cols = 64
-options.chain_length = 2  # 2块拼接（64*2 = 128宽）
+options.chain_length = 2
 options.parallel = 1
-options.hardware_mapping = 'regular'  # 如果你是HUB75就用'regular'
+options.hardware_mapping = 'regular'
 
 matrix = RGBMatrix(options=options)
 
-# 加载字体
-font = graphics.Font()
-font.LoadFont("/home/pi/rpi-rgb-led-matrix/fonts/7x13.bdf")  # 用的是系统字体
-color = graphics.Color(255, 0, 0)
-
-# 显示文字
 while True:
+    matrix.Fill(255, 0, 0)  # 全红
+    time.sleep(1)
     matrix.Clear()
-    graphics.DrawText(matrix, font, 10, 20, color, "HELLO GWIM")
+    matrix.Fill(0, 255, 0)  # 全绿
+    time.sleep(1)
+    matrix.Clear()
+    matrix.Fill(0, 0, 255)  # 全蓝
     time.sleep(1)
