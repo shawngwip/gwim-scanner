@@ -17,8 +17,8 @@ def debug(msg):
         print(f"[DEBUG] {msg}")
 
 # --- GPIO Setup ---
-LED_SYSTEM = 17  # System status LED: always ON
-LED_ALERT = 27   # Alert LED: blink for success/error
+LED_SYSTEM = 21  # System status LED: always ON
+LED_ALERT = 20   # Alert LED: blink for success/error
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
