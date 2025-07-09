@@ -31,6 +31,12 @@ GPIO.setup(GREEN_PIN, GPIO.OUT)
 GPIO.setup(YELLOW_PIN, GPIO.OUT)
 GPIO.setup(BUZZER_PIN, GPIO.OUT)
 
+# 初始化所有灯和 buzzer 为 OFF（HIGH 表示 OFF）
+GPIO.output(RED_PIN, GPIO.HIGH)
+GPIO.output(GREEN_PIN, GPIO.HIGH)
+GPIO.output(YELLOW_PIN, GPIO.HIGH)
+GPIO.output(BUZZER_PIN, GPIO.HIGH)
+
 # === State Control ===
 def set_light(pin, state):
     GPIO.output(pin, GPIO.HIGH if state else GPIO.LOW)
