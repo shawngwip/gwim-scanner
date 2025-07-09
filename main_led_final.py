@@ -38,35 +38,26 @@ GPIO.output(YELLOW_PIN, GPIO.HIGH)
 GPIO.output(BUZZER_PIN, GPIO.HIGH)
 
 # === State Control ===
-# --- System Power-On Startup Blink ---
-def startup_blink_green():
+# --- Startup blinking thread (Fast then slow until RESET) ---
+green_blink_thread = None
+green_blink_running = True
+
+def continuous_green_blink():
+    global green_blink_running
+    # Fast blink 5 times
     for _ in range(5):
-        GPIO.output(GREEN_PIN, GPIO.LOW)
+        set_light(GREEN_PIN, True)
         time.sleep(0.2)
-        GPIO.output(GREEN_PIN, GPIO.HIGH)
+        set_light(GREEN_PIN, False)
         time.sleep(0.1)
+    # Slow blink until RESET
+    while green_blink_running:
+        set_light(GREEN_PIN, True)
+        time.sleep(0.5)
+        set_light(GREEN_PIN, False)
+        time.sleep(0.5)
 
-def set_light(pin, state):
-    GPIO.output(pin, GPIO.LOW if state else GPIO.HIGH)
-
-def blink_light(pin, duration=0.2, times=3):
-    for _ in range(times):
-        GPIO.output(pin, GPIO.HIGH)
-        time.sleep(duration)
-        GPIO.output(pin, GPIO.LOW)
-        time.sleep(duration)
-
-def buzz(times=1, duration=0.2):
-    for _ in range(times):
-        GPIO.output(BUZZER_PIN, GPIO.HIGH)
-        time.sleep(duration)
-        GPIO.output(BUZZER_PIN, GPIO.LOW)
-        time.sleep(duration)
-
-# === Network Checker ===
-def check_internet():
-    response = os.system("ping -c 1 -W 1 8.8.8.8 > /dev/null 2>&1")
-    return response == 0
+ response == 0
 
 def update_yellow_light():
     if check_internet():
@@ -271,7 +262,8 @@ def on_key(event):
 
         if is_reset_code(barcode):
             # Green: slow blink after RESET
-            threading.Thread(target=lambda: blink_light(GREEN_PIN, 0.5, 3)).start()
+            green_blink_running = False
+        set_light(GREEN_PIN, True)
             current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
             current_muf = None
             template_code = None
@@ -280,6 +272,7 @@ def on_key(event):
         elif not current_batch:
             debug("⚠️ Please scan RESET first.")
             blink_light(RED_PIN, 0.3, 3)
+            set_light(RED_PIN, False)
             buzz(1)
         elif current_muf is None:
             try:
@@ -295,10 +288,12 @@ def on_key(event):
                 else:
                     debug(f"❌ MUF not found: {clean_barcode}")
                     blink_light(RED_PIN, 0.3, 3)
+            set_light(RED_PIN, False)
                     buzz(1)
             except Exception as e:
                 debug(f"⚠️ DB connection error: {e}")
                 blink_light(RED_PIN, 0.3, 3)
+            set_light(RED_PIN, False)
                 buzz(1)
         elif template_code is None:
             if barcode == current_muf:
@@ -310,6 +305,7 @@ def on_key(event):
         elif barcode != template_code:
             debug(f"❌ Barcode mismatch: {barcode} ≠ {template_code}, skipped DB")
             blink_light(RED_PIN, 0.3, 3)
+            set_light(RED_PIN, False)
             buzz(1)
         else:
             process_and_store(barcode, muf_info)
@@ -322,7 +318,8 @@ def on_key(event):
 # --- Main entry ---
 if __name__ == '__main__':
     upload_from_csv()
-    startup_blink_green()
-debug("🧭 Listening for barcode scan via keyboard...")
+    green_blink_thread = threading.Thread(target=continuous_green_blink)
+    green_blink_thread.start()
+    debug(\"🧭 Listening for barcode scan via keyboard...\")
     keyboard.on_press(on_key)
     keyboard.wait()
