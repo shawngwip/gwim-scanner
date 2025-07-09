@@ -17,9 +17,9 @@ def debug(msg):
         print(f"[DEBUG] {msg}")
 
 # --- GPIO Setup ---
-
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
+
 # === Tower Light & Buzzer GPIO Setup ===
 RED_PIN = 5       # Red tower light
 GREEN_PIN = 6     # Green tower light
@@ -42,6 +42,23 @@ GPIO.output(BUZZER_PIN, GPIO.HIGH)
 green_blink_thread = None
 green_blink_running = True
 
+def set_light(pin, state=True):
+    GPIO.output(pin, GPIO.LOW if state else GPIO.HIGH)
+
+def blink_light(pin, duration=0.3, times=3):
+    for _ in range(times):
+        set_light(pin, True)
+        time.sleep(duration)
+        set_light(pin, False)
+        time.sleep(duration)
+
+def buzz(times=1, duration=0.15):
+    for _ in range(times):
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
+        time.sleep(duration)
+        GPIO.output(BUZZER_PIN, GPIO.HIGH)
+        time.sleep(0.1)
+
 def continuous_green_blink():
     global green_blink_running
     # Fast blink 5 times
@@ -57,7 +74,12 @@ def continuous_green_blink():
         set_light(GREEN_PIN, False)
         time.sleep(0.5)
 
- response == 0
+def check_internet():
+    try:
+        response = os.system("ping -c 1 8.8.8.8 > /dev/null 2>&1")
+        return response == 0
+    except:
+        return False
 
 def update_yellow_light():
     if check_internet():
@@ -68,8 +90,6 @@ def update_yellow_light():
 
 update_yellow_light()  # Start yellow light check thread
 
-
-
 # --- Redirect stdout/stderr to log file ---
 try:
     log_path = "/home/pi/gwim-scanner/gwim_log.txt"
@@ -78,7 +98,7 @@ try:
     debug("🔁 Script started (log ready)")
 except Exception as e:
     with open("/home/pi/gwim-scanner/gwim_fallback.txt", "a") as f:
-        f.write(f"Logging failed: {e}\n")
+        f.write(f"Logging failed: {e}\\n")
 
 # --- Helper functions ---
 def safe_int(value):
@@ -102,7 +122,7 @@ CSV_FOLDER = "/home/pi/gwim-scanner/logs"
 os.makedirs(CSV_FOLDER, exist_ok=True)
 
 RESET_CODES = {"123456789"}
-SCAN_INTERVAL = 2.0  # <- changed to 2.0 seconds
+SCAN_INTERVAL = 2.0  # seconds
 
 current_batch = None
 current_muf = None
@@ -171,11 +191,10 @@ def process_and_store(barcode, muf_info):
         conn.close()
         debug("✅ DB insert successful")
         write_to_csv(data, current_muf, uploaded=1)
-        
+
     except Exception as e:
         debug(f"⚠️ DB insert failed. Cached locally: {e}")
         write_to_csv(data, current_muf, uploaded=0)
-        
 
 # --- Upload pending CSV data every 5 minutes ---
 def upload_from_csv():
@@ -229,7 +248,7 @@ def upload_from_csv():
                     writer.writerows(reader)
                 debug(f"✅ Upload complete and marked: {path}")
 
-    threading.Timer(100, upload_from_csv).start()
+    threading.Timer(300, upload_from_csv).start()
 
 # --- Check if barcode is a RESET code ---
 def is_reset_code(barcode):
@@ -237,10 +256,9 @@ def is_reset_code(barcode):
     return normalized in {normalize_barcode(r) for r in RESET_CODES}
 
 # --- Barcode scan listener ---
-# --- Enhanced Logic with Tower Light ---
 def on_key(event):
     global barcode_buffer, last_barcode, last_scan_time
-    global current_batch, current_muf, template_code, muf_info
+    global current_batch, current_muf, template_code, muf_info, green_blink_running
 
     if event.name == "enter":
         barcode = barcode_buffer.strip()
@@ -250,30 +268,29 @@ def on_key(event):
         now = datetime.now()
         now_ts = time.time()
 
-        # --- Prevent duplicate within 2 seconds ---
         if barcode == last_barcode and now_ts - last_scan_time < SCAN_INTERVAL:
             debug(f"⏱️ Duplicate scan ignored: {barcode}")
             return
 
         last_barcode = barcode
         last_scan_time = now_ts
-
         debug(f"📥 Scanned barcode: '{barcode}' → normalized: '{normalized_barcode}'")
 
         if is_reset_code(barcode):
-            # Green: slow blink after RESET
             green_blink_running = False
-        set_light(GREEN_PIN, True)
+            set_light(GREEN_PIN, True)
             current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
             current_muf = None
             template_code = None
             muf_info = None
             debug(f"🔄 RESET scanned. New batch: {current_batch}")
+
         elif not current_batch:
             debug("⚠️ Please scan RESET first.")
             blink_light(RED_PIN, 0.3, 3)
             set_light(RED_PIN, False)
             buzz(1)
+
         elif current_muf is None:
             try:
                 clean_barcode = normalize_barcode(barcode)
@@ -288,13 +305,14 @@ def on_key(event):
                 else:
                     debug(f"❌ MUF not found: {clean_barcode}")
                     blink_light(RED_PIN, 0.3, 3)
-            set_light(RED_PIN, False)
+                    set_light(RED_PIN, False)
                     buzz(1)
             except Exception as e:
                 debug(f"⚠️ DB connection error: {e}")
                 blink_light(RED_PIN, 0.3, 3)
-            set_light(RED_PIN, False)
+                set_light(RED_PIN, False)
                 buzz(1)
+
         elif template_code is None:
             if barcode == current_muf:
                 debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
@@ -302,11 +320,13 @@ def on_key(event):
             template_code = barcode
             debug(f"🧾 Template barcode set: {template_code}")
             process_and_store(barcode, muf_info)
+
         elif barcode != template_code:
             debug(f"❌ Barcode mismatch: {barcode} ≠ {template_code}, skipped DB")
             blink_light(RED_PIN, 0.3, 3)
             set_light(RED_PIN, False)
             buzz(1)
+
         else:
             process_and_store(barcode, muf_info)
 
@@ -320,6 +340,6 @@ if __name__ == '__main__':
     upload_from_csv()
     green_blink_thread = threading.Thread(target=continuous_green_blink)
     green_blink_thread.start()
-    debug(\"🧭 Listening for barcode scan via keyboard...\")
+    debug("🧭 Listening for barcode scan via keyboard...")
     keyboard.on_press(on_key)
     keyboard.wait()
