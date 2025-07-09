@@ -1,25 +1,42 @@
 import RPi.GPIO as GPIO
 import time
 
+# GPIO 引脚编号
 RED_PIN = 5
+GREEN_PIN = 6
+YELLOW_PIN = 13
 
+# 使用 BCM 模式
 GPIO.setmode(GPIO.BCM)
+
+# 初始化为输出
 GPIO.setup(RED_PIN, GPIO.OUT)
+GPIO.setup(GREEN_PIN, GPIO.OUT)
+GPIO.setup(YELLOW_PIN, GPIO.OUT)
 
-# 初始化为不亮
+# 初始化为关闭（HIGH = 灯灭）
 GPIO.output(RED_PIN, GPIO.HIGH)
-print("灯灭了，5 秒后亮")
-time.sleep(5)
+GPIO.output(GREEN_PIN, GPIO.HIGH)
+GPIO.output(YELLOW_PIN, GPIO.HIGH)
 
-# 点亮
-GPIO.output(RED_PIN, GPIO.LOW)
-print("灯亮起，5 秒后关闭")
-time.sleep(5)
+print("🔴 Red ON")
+GPIO.output(RED_PIN, GPIO.LOW)   # 灯亮
+time.sleep(2)
+GPIO.output(RED_PIN, GPIO.HIGH)  # 灯灭
 
-# 灭灯
-GPIO.output(RED_PIN, GPIO.HIGH)
-print("测试完毕")
+print("🟢 Green ON")
+GPIO.output(GREEN_PIN, GPIO.LOW)
+time.sleep(2)
+GPIO.output(GREEN_PIN, GPIO.HIGH)
+
+print("🟡 Yellow ON")
+GPIO.output(YELLOW_PIN, GPIO.LOW)
+time.sleep(2)
+GPIO.output(YELLOW_PIN, GPIO.HIGH)
+
+print("✅ 测试完成，清理 GPIO")
 GPIO.cleanup()
+
 
 
 import RPi.GPIO as GPIO
