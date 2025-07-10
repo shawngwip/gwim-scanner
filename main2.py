@@ -39,8 +39,9 @@ GPIO.output(BUZZER_PIN, GPIO.HIGH)
 
 # === State Control ===
 # --- Startup blinking thread (Fast then slow until RESET) ---
-green_blink_thread = None
 green_blink_running = True
+green_blink_thread = None
+
 
 def set_light(pin, state=True):
     GPIO.output(pin, GPIO.LOW if state else GPIO.HIGH)
@@ -276,13 +277,28 @@ def on_key(event):
         last_scan_time = now_ts
         debug(f"📥 Scanned barcode: '{barcode}' → normalized: '{normalized_barcode}'")
 
+        # if is_reset_code(barcode):
+        #     debug(f"🔄 RESET scanned. Starting new batch")
+        #     current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
+        #     current_muf = None
+        #     template_code = None
+        #     muf_info = None
+        #     green_blink_running = True  # ✅ reset green blinking
+
         if is_reset_code(barcode):
             debug(f"🔄 RESET scanned. Starting new batch")
             current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
             current_muf = None
             template_code = None
             muf_info = None
-            green_blink_running = True  # ✅ reset green blinking
+
+            green_blink_running = True  # ✅ 重启 blink
+
+            if green_blink_thread is None or not green_blink_thread.is_alive():
+                green_blink_thread = threading.Thread(target=continuous_green_blink)
+                green_blink_thread.daemon = True
+                green_blink_thread.start()
+
 
         elif not current_batch:
             debug("⚠️ Please scan RESET first.")
@@ -359,12 +375,6 @@ if __name__ == '__main__':
     yellow_checker.start()
 
     # Start keyboard listener
-    debug("🧭 Listening for barcode scan via keyboard...")
-    keyboard.on_press(on_key)
-    keyboard.wait()
-    upload_from_csv()
-    green_blink_thread = threading.Thread(target=continuous_green_blink)
-    green_blink_thread.start()
     debug("🧭 Listening for barcode scan via keyboard...")
     keyboard.on_press(on_key)
     keyboard.wait()
