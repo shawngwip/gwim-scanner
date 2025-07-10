@@ -150,7 +150,7 @@ def write_to_csv(data, muf_no, uploaded=0, remarks=''):
                 writer.writerow([
                     "muf_no", "line", "fg_no", "pack_per_ctn", "pack_per_hr",
                     "actual_pack", "ctn_count", "scanned_code", "scanned_count",
-                    "scanned_at", "scanned_by", \"is_uploaded\", \"remarks\"
+                    "scanned_at", "scanned_by", "is_uploaded", "remarks"
                 ])
             writer.writerow(data + (uploaded, remarks))
         debug(f"📂 Written to CSV: {filename} (uploaded={uploaded})")
