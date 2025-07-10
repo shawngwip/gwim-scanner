@@ -319,8 +319,13 @@ def on_key(event):
             if barcode == current_muf:
                 debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
                 return
+            if barcode == current_muf:
+                debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
+                return
             template_code = barcode
             debug(f"🧾 Template barcode set: {template_code}")
+            green_blink_running = False
+            set_light(GREEN_PIN, True)
             process_and_store(barcode, muf_info, remarks="TEMPLATE")
 
         elif barcode != template_code:
@@ -330,9 +335,6 @@ def on_key(event):
             buzz(1)
 
         else:
-            if not template_code:
-                green_blink_running = False
-                set_light(GREEN_PIN, True)
             process_and_store(barcode, muf_info)
 
     elif len(event.name) == 1:
@@ -342,6 +344,31 @@ def on_key(event):
 
 # --- Main entry ---
 if __name__ == '__main__':
+    # Initialize GPIO outputs to off
+    GPIO.output(RED_PIN, GPIO.HIGH)
+    GPIO.output(GREEN_PIN, GPIO.HIGH)
+    GPIO.output(YELLOW_PIN, GPIO.HIGH)
+    GPIO.output(BUZZER_PIN, GPIO.HIGH)
+
+    debug("🔌 GPIO initialized")
+
+    # Start CSV upload thread
+    upload_from_csv()
+
+    # Start green blinking thread
+    green_blink_thread = threading.Thread(target=continuous_green_blink)
+    green_blink_thread.daemon = True
+    green_blink_thread.start()
+
+    # Start network checker thread
+    yellow_checker = threading.Thread(target=update_yellow_light)
+    yellow_checker.daemon = True
+    yellow_checker.start()
+
+    # Start keyboard listener
+    debug("🧭 Listening for barcode scan via keyboard...")
+    keyboard.on_press(on_key)
+    keyboard.wait()
     upload_from_csv()
     green_blink_thread = threading.Thread(target=continuous_green_blink)
     green_blink_thread.start()
