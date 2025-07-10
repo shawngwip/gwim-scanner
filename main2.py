@@ -140,7 +140,7 @@ def fetch_muf_info(cursor, muf_code):
     cursor.execute("SELECT * FROM main WHERE muf_no = %s", (muf_code,))
     return cursor.fetchone()
 
-def write_to_csv(data, muf_no, uploaded=0):
+def write_to_csv(data, muf_no, uploaded=0, remarks=''):
     with csv_lock:
         filename = os.path.join(CSV_FOLDER, f"{muf_no}_{datetime.now().strftime('%Y%m%d')}.csv")
         is_new = not os.path.exists(filename)
@@ -190,11 +190,11 @@ def process_and_store(barcode, muf_info, remarks=''):
         conn.commit()
         conn.close()
         debug("✅ DB insert successful")
-        write_to_csv(data, current_muf, uploaded=1)
+        write_to_csv(data, current_muf, uploaded=1, remarks=remarks)
 
     except Exception as e:
         debug(f"⚠️ DB insert failed. Cached locally: {e}")
-        write_to_csv(data, current_muf, uploaded=0)
+        write_to_csv(data, current_muf, uploaded=0, remarks=remarks)
 
 # --- Upload pending CSV data every 5 minutes ---
 def upload_from_csv():
