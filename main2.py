@@ -277,13 +277,12 @@ def on_key(event):
         debug(f"📥 Scanned barcode: '{barcode}' → normalized: '{normalized_barcode}'")
 
         if is_reset_code(barcode):
-            green_blink_running = False
-            set_light(GREEN_PIN, True)
+            debug(f"🔄 RESET scanned. Starting new batch")
             current_batch = f"batch_{now.strftime('%Y%m%d_%H%M%S')}"
             current_muf = None
             template_code = None
             muf_info = None
-            debug(f"🔄 RESET scanned. New batch: {current_batch}")
+            green_blink_running = True  # ✅ reset green blinking
 
         elif not current_batch:
             debug("⚠️ Please scan RESET first.")
@@ -301,9 +300,6 @@ def on_key(event):
                 if muf_info:
                     current_muf = clean_barcode
                     debug(f"✅ MUF found: {current_muf}")
-                    if template_code:
-                        green_blink_running = False
-                        set_light(GREEN_PIN, True)
                 else:
                     debug(f"❌ MUF not found: {clean_barcode}")
                     blink_light(RED_PIN, 0.3, 3)
@@ -319,12 +315,9 @@ def on_key(event):
             if barcode == current_muf:
                 debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
                 return
-            if barcode == current_muf:
-                debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
-                return
             template_code = barcode
             debug(f"🧾 Template barcode set: {template_code}")
-            green_blink_running = False
+            green_blink_running = False  # ✅ Stop blinking only here!
             set_light(GREEN_PIN, True)
             process_and_store(barcode, muf_info, remarks="TEMPLATE")
 
