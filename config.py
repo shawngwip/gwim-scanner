@@ -4,5 +4,5 @@ MYSQL_CONFIG = {
     "password": "fb267146d223afbd24e88d5ea8090b0b8cdc4254146fa62d", # itadmin@2018
     "database": "production" # production-testing
 }
-DEVICE_LINE = "test-line1"
+DEVICE_LINE = "HF1" # Change for each production line
 DEVICE_ID = "RPI-TEST-01"
