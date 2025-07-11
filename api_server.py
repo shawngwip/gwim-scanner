@@ -1,7 +1,7 @@
-from PIL import Image, ImageDraw, ImageFont
 from flask import Flask, jsonify
 import mysql.connector
-from datetime import date, datetime as dt, timedelta
+from datetime import datetime as dt, timedelta
+from contextlib import contextmanager
 
 app = Flask(__name__)
 
@@ -17,114 +17,76 @@ def connect_production_db():
         charset='utf8mb4'
     )
 
-def query_database():
-    conn = None
-    cursor = None
+@contextmanager
+def get_cursor(dict_mode=False):
+    conn = connect_production_db()
+    cursor = conn.cursor(dictionary=dict_mode)
     try:
-        conn = connect_production_db()
-        cursor = conn.cursor(dictionary=True)
+        yield cursor
+    finally:
+        cursor.close()
+        conn.close()
 
-        query = """
-        SELECT muf_no FROM output_test
-        WHERE muf_no IS NOT NULL AND muf_no != '' AND line = %s
-        ORDER BY id DESC
-        LIMIT 1
-        """
-        cursor.execute(query, (LINE_NAME,))
-        result = cursor.fetchone()
-
-        return result if result else {"message": "No recent muf_no found"}
+def query_database():
+    try:
+        with get_cursor(dict_mode=True) as cursor:
+            cursor.execute("""
+                            SELECT muf_no FROM output_test
+                            WHERE muf_no IS NOT NULL AND muf_no != '' AND line = %s
+                            ORDER BY id DESC
+                            LIMIT 1
+                        """, (LINE_NAME,))
+            result = cursor.fetchone()
+            return result if result else {"message": "No recent muf_no found"}
 
     except mysql.connector.Error as err:
         return {"error": str(err)}
 
-    finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
-
-def get_total_carton_needed(muf_no):
-    conn = connect_production_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT qty_done FROM main WHERE muf_no = %s LIMIT 1", (muf_no,))
-        result = cursor.fetchone()
-        return float(result[0]) if result and result[0] is not None else 0
-    finally:
-        cursor.close()
-        conn.close()
-
-def get_target_hour(muf_no):
-    conn = connect_production_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
+def get_output_info(muf_no):
+    with get_cursor(dict_mode=True) as cursor:
+        # 1. Get qty_done, pack_per_ctn, pack_per_hr from main
         cursor.execute("""
-            SELECT pack_per_ctn, pack_per_hr FROM output_test
-            WHERE muf_no = %s LIMIT 1
+            SELECT qty_done, pack_per_ctn, pack_per_hr
+            FROM main
+            WHERE muf_no = %s
+            LIMIT 1
         """, (muf_no,))
-        result = cursor.fetchone()
-        if result and result['pack_per_ctn'] and result['pack_per_hr']:
-            return int(round(result['pack_per_hr'] / result['pack_per_ctn'], 0))
-        return 0
-    finally:
-        cursor.close()
-        conn.close()
+        main_data = cursor.fetchone()
 
-def get_average_hourly_output(muf_no, line):
-    conn = connect_production_db()
-    cursor = conn.cursor()
+        if not main_data:
+            return None
+
+        # 2. Get total cartons done from output_test
+        cursor.execute("""
+            SELECT SUM(ctn_count) AS done_cartons
+            FROM output_test
+            WHERE muf_no = %s AND (remarks IS NULL OR LOWER(remarks) NOT LIKE '%%template%%')
+        """, (muf_no,))
+        done_result = cursor.fetchone()
+        main_data['done_cartons'] = done_result['done_cartons'] or 0
+
+        return main_data
+
+
+def get_average_hourly_output(muf_no, line=LINE_NAME):
     try:
         now = dt.now()
         hour_start = now.replace(minute=1, second=0, microsecond=0)
         hour_end = hour_start + timedelta(minutes=59)
         query = """
             SELECT SUM(ctn_count) FROM output_test
-            WHERE muf_no = %s AND line = %s AND scanned_at BETWEEN %s AND %s
+            WHERE muf_no = %s AND line = %s AND scanned_at BETWEEN %s AND %s AND (remarks IS NULL OR LOWER(remarks) NOT LIKE '%%template%%')
         """
-        cursor.execute(query, (muf_no, line, hour_start, hour_end))
-        result = cursor.fetchone()
-        return int(result[0]) if result and result[0] else 0
-    finally:
-        cursor.close()
-        conn.close()
-
-def get_balance_carton(muf_no):
-    conn = connect_production_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT qty_done FROM main WHERE muf_no = %s LIMIT 1", (muf_no,))
-        qty_done_result = cursor.fetchone()
-        qty_done = int(qty_done_result[0]) if qty_done_result and qty_done_result[0] is not None else 0
-
-        cursor.execute("SELECT SUM(ctn_count) FROM output_test WHERE muf_no = %s", (muf_no,))
-        ctn_sum_result = cursor.fetchone()
-        ctn_done = int(ctn_sum_result[0]) if ctn_sum_result and ctn_sum_result[0] else 0
-
-        return qty_done - ctn_done
-    finally:
-        cursor.close()
-        conn.close()
-
-def get_balance_hours(muf_no):
-    conn = connect_production_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT pack_per_ctn, pack_per_hr FROM output_test WHERE muf_no = %s LIMIT 1", (muf_no,))
-        output_info = cursor.fetchone()
-        if not output_info:
-            return 0.0
-
-        pack_per_ctn = float(output_info['pack_per_ctn'])
-        pack_per_hr = float(output_info['pack_per_hr'])
-
-        balance_cartons = get_balance_carton(muf_no)
-        if pack_per_hr == 0:
-            return 0.0
-        return round((balance_cartons * pack_per_ctn) / pack_per_hr, 1)
-    finally:
-        cursor.close()
-        conn.close()
+        with get_cursor(dict_mode=True) as cursor:
+            cursor.execute(query, (muf_no, line, hour_start, hour_end))
+            result = cursor.fetchone()
+            if result:
+                # Dynamically get first column name
+                key = cursor.column_names[0] # type: ignore[attr-defined]
+                return int(result[key]) if result[key] else 0
+            return 0
+    except mysql.connector.Error as err:
+        return {"error": str(err)}
 
 @app.route('/query', methods=['GET'])
 def get_query():
@@ -141,47 +103,26 @@ def get_summary():
         return jsonify({"error": "No WIP muf_no found"}), 404
 
     muf_no = data["muf_no"]
-    line = LINE_NAME
+    output_info = get_output_info(muf_no)
+    if not output_info:
+        return jsonify({"error": "No output data found"}), 404
+    qty_done = int(output_info['qty_done'] or 0)
+    pack_per_ctn = float(output_info['pack_per_ctn'] or 1)
+    pack_per_hr = float(output_info['pack_per_hr'] or 1)
+    done_cartons = int(output_info['done_cartons'] or 0)
+
+    balance_cartons = qty_done - done_cartons
+    balance_hours = round((balance_cartons * pack_per_ctn) / pack_per_hr, 1) if pack_per_hr else 0
+
     summary = {
         "muf_no": muf_no,
-        "total_carton_needed": get_total_carton_needed(muf_no),
-        "target_hour": get_target_hour(muf_no),
-        "avg_hourly_output": get_average_hourly_output(muf_no, line),
-        "balance_carton": get_balance_carton(muf_no),
-        "balance_hours": get_balance_hours(muf_no)
+        "total_carton_needed": qty_done,
+        "target_hour": int(pack_per_hr // pack_per_ctn),
+        "avg_hourly_output": get_average_hourly_output(muf_no),
+        "balance_carton": balance_cartons,
+        "balance_hours": balance_hours
     }
     return jsonify(summary)
 
-def create_custom_bitmap(text, width=160, height=32):
-    img = Image.new('1', (width, height), color=0)
-    draw = ImageDraw.Draw(img)
-
-    try:
-        font = ImageFont.truetype("arial.ttf", 24)
-    except IOError:
-        font = ImageFont.load_default()
-
-    w, h = font.getmask(text).size
-    x = (width - w) // 2
-    y = (height - h) // 2
-    draw.text((x, y), text, fill=1, font=font)
-    return img
-
-def image_to_hex(img):
-    width, height = img.size
-    pixels = img.load()
-    bits = []
-    for y in range(height):
-        for x in range(width):
-            bits.append('1' if pixels[x, y] else '0')
-
-    hex_str = ''
-    for i in range(0, len(bits), 8):
-        byte_bits = bits[i:i+8]
-        byte_str = ''.join(byte_bits)
-        byte_val = int(byte_str, 2)
-        hex_str += f'{byte_val:02x}'
-    return hex_str
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=5001)
