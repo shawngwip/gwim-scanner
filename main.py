@@ -289,7 +289,7 @@ def upload_from_csv():
                     "INSERT INTO output_test ("
                     "muf_no, line, fg_no, pack_per_ctn, pack_per_hr, actual_pack, "
                     "ctn_count, scanned_code, scanned_count, scanned_at, scanned_by, remarks"
-                    ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                 )
                 # Map row data to SQL parameters based on headers
                 muf_no_idx = headers.index("muf_no")
