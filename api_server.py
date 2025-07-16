@@ -31,7 +31,7 @@ def query_database():
     try:
         with get_cursor(dict_mode=True) as cursor:
             cursor.execute("""
-                            SELECT muf_no FROM output_test
+                            SELECT muf_no FROM output_log
                             WHERE muf_no IS NOT NULL AND muf_no != '' AND line = %s
                             ORDER BY id DESC
                             LIMIT 1
@@ -56,10 +56,10 @@ def get_output_info(muf_no):
         if not main_data:
             return None
 
-        # 2. Get total cartons done from output_test
+        # 2. Get total cartons done from output_log
         cursor.execute("""
             SELECT SUM(ctn_count) AS done_cartons
-            FROM output_test
+            FROM output_log
             WHERE muf_no = %s AND (remarks IS NULL OR LOWER(remarks) NOT LIKE '%%template%%')
         """, (muf_no,))
         done_result = cursor.fetchone()
@@ -74,7 +74,7 @@ def get_average_hourly_output(muf_no, line=LINE_NAME):
         hour_start = now.replace(minute=1, second=0, microsecond=0)
         hour_end = hour_start + timedelta(minutes=59)
         query = """
-            SELECT SUM(ctn_count) FROM output_test
+            SELECT SUM(ctn_count) FROM output_log
             WHERE muf_no = %s AND line = %s AND scanned_at BETWEEN %s AND %s AND (remarks IS NULL OR LOWER(remarks) NOT LIKE '%%template%%')
         """
         with get_cursor(dict_mode=True) as cursor:
