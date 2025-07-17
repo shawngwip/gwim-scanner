@@ -418,7 +418,8 @@ def on_key(event):
             if normalized == current_muf:
                 debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
                 start_red_buzzer_alert()
-                return  # Ensure template is not set
+                return   # Keep existing template if duplicate MUF scanned as template
+            
             template_code = normalized
             debug(f"🧾 Template barcode set: {template_code}")
 
@@ -433,15 +434,15 @@ def on_key(event):
             process_and_store(barcode, muf_info, remarks="TEMPLATE")
             # Alerts would have been stopped by stop_all_alerts()
 
-        elif barcode != template_code:
-            debug(f"❌ Barcode mismatch: {barcode} ≠ {template_code}, skipped DB")
+        elif normalize_barcode(barcode) != template_code:
+            debug(f"❌ Barcode mismatch: {normalize_barcode(barcode)} ≠ {template_code}, skipped DB")
             # Green light should remain solid ON if it was. No change needed here.
             start_red_buzzer_alert() # Optimized call
 
         else: # Barcode matches template_code
-            debug(f"✅ Barcode matches template: {barcode}")
+            debug(f"✅ Barcode matches template: {template_code}")
             # Green light should remain solid ON. No change needed here.
-            process_and_store(barcode, muf_info)
+            process_and_store(template_code, muf_info)
             # Alerts would have been stopped by stop_all_alerts()
 
     elif len(event.name) == 1:
