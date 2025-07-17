@@ -60,9 +60,9 @@ def blink_light(pin, duration=0.3, times=3): # This function will now only be us
 
 def buzz(times=1, duration=0.15): # This function will now only be used for initial buzz if needed
     for _ in range(times):
-        GPIO.output(BUZZER_PIN, GPIO.LOW)
+        GPIO.output(BUZZER_PIN, GPIO.HIGH)  # 如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.LOW)
         time.sleep(duration)
-        GPIO.output(BUZZER_PIN, GPIO.HIGH)
+        GPIO.output(BUZZER_PIN, GPIO.LOW)   # 如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.HIGH)
         time.sleep(0.1)
 
 def continuous_green_blink():
@@ -93,11 +93,11 @@ def continuous_red_blink():
 def continuous_buzz():
     global buzzer_alert_active
     while buzzer_alert_active:
-        GPIO.output(BUZZER_PIN, GPIO.LOW)
+        GPIO.output(BUZZER_PIN, GPIO.HIGH) # 如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.LOW)
         time.sleep(0.15) # Beep for 0.15 seconds
-        GPIO.output(BUZZER_PIN, GPIO.HIGH)
+        GPIO.output(BUZZER_PIN, GPIO.LOW) # 如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.HIGH)
         time.sleep(0.5) # Pause for 0.5 seconds between beeps
-    GPIO.output(BUZZER_PIN, GPIO.HIGH) # Ensure buzzer is off when thread terminates 
+    GPIO.output(BUZZER_PIN, GPIO.LOW) # Ensure buzzer is off when thread terminates  # 如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.HIGH)
 
 def stop_all_alerts():
     global red_alert_active, buzzer_alert_active, red_alert_thread, buzzer_alert_thread
