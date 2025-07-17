@@ -31,11 +31,11 @@ GPIO.setup(GREEN_PIN, GPIO.OUT)
 GPIO.setup(YELLOW_PIN, GPIO.OUT)
 GPIO.setup(BUZZER_PIN, GPIO.OUT)
 
-# 初始化所有灯和 buzzer 为 OFF（HIGH 表示 OFF）
-GPIO.output(RED_PIN, GPIO.HIGH)
-GPIO.output(GREEN_PIN, GPIO.HIGH)
-GPIO.output(YELLOW_PIN, GPIO.HIGH)
-GPIO.output(BUZZER_PIN, GPIO.HIGH)
+# 初始化所有灯和 buzzer 为 OFF（LOW 表示 OFF）
+GPIO.output(RED_PIN, GPIO.LOW)      # 如果用Relay GPIO.output(RED_PIN, GPIO.HIGH)
+GPIO.output(GREEN_PIN, GPIO.LOW)    # 如果用Relay GPIO.output(RED_PIN, GPIO.HIGH)
+GPIO.output(YELLOW_PIN, GPIO.LOW)   # 如果用Relay GPIO.output(RED_PIN, GPIO.HIGH)
+GPIO.output(BUZZER_PIN, GPIO.LOW)   # 如果用Relay GPIO.output(RED_PIN, GPIO.HIGH)
 
 # === State Control ===
 # --- Startup blinking thread (Fast then slow until correct MUF and first carton（carton！=muf）) ---
@@ -49,7 +49,7 @@ buzzer_alert_active = False
 buzzer_alert_thread = None
 
 def set_light(pin, state=True):
-    GPIO.output(pin, GPIO.HIGH if state else GPIO.LOW) #如果用Relay 要变成 GPIO.output(pin, GPIO.LOW if state else GPIO.HIGHT)
+    GPIO.output(pin, GPIO.HIGH if state else GPIO.LOW) #如果用Relay 要变成 GPIO.output(pin, GPIO.LOW if state else GPIO.HIGH)
 
 def blink_light(pin, duration=0.3, times=3): # This function will now only be used for yellow light if needed
     for _ in range(times):
@@ -60,9 +60,9 @@ def blink_light(pin, duration=0.3, times=3): # This function will now only be us
 
 def buzz(times=1, duration=0.15): # This function will now only be used for initial buzz if needed
     for _ in range(times):
-        GPIO.output(BUZZER_PIN, GPIO.HIGH)#如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.LOW)
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
         time.sleep(duration)
-        GPIO.output(BUZZER_PIN, GPIO.LOW)#如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.HIGH)
+        GPIO.output(BUZZER_PIN, GPIO.HIGH)
         time.sleep(0.1)
 
 def continuous_green_blink():
@@ -93,11 +93,11 @@ def continuous_red_blink():
 def continuous_buzz():
     global buzzer_alert_active
     while buzzer_alert_active:
-        GPIO.output(BUZZER_PIN, GPIO.HIGH) #如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.LOW)
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
         time.sleep(0.15) # Beep for 0.15 seconds
-        GPIO.output(BUZZER_PIN, GPIO.LOW) #如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.HIGH)
+        GPIO.output(BUZZER_PIN, GPIO.HIGH)
         time.sleep(0.5) # Pause for 0.5 seconds between beeps
-    GPIO.output(BUZZER_PIN, GPIO.LOW) # Ensure buzzer is off when thread terminates #如果用Relay 要变成 GPIO.output(BUZZER_PIN, GPIO.HIGH)
+    GPIO.output(BUZZER_PIN, GPIO.HIGH) # Ensure buzzer is off when thread terminates 
 
 def stop_all_alerts():
     global red_alert_active, buzzer_alert_active, red_alert_thread, buzzer_alert_thread
@@ -414,13 +414,12 @@ def on_key(event):
 
 
         elif template_code is None:
-            if barcode == current_muf:
+            normalized = normalize_barcode(barcode)
+            if normalized == current_muf:
                 debug(f"⚠️ Duplicate MUF barcode: {barcode}, ignoring as template")
-                # This is still an invalid state for setting template
-                start_red_buzzer_alert() # Optimized call
-                return # Keep existing template if duplicate MUF scanned as template
-
-            template_code = barcode
+                start_red_buzzer_alert()
+                return  # Ensure template is not set
+            template_code = normalized
             debug(f"🧾 Template barcode set: {template_code}")
 
             # Stop the green blinking thread gracefully
@@ -453,10 +452,10 @@ def on_key(event):
 # --- Main entry ---
 if __name__ == '__main__':
     # Initialize GPIO outputs to off
-    GPIO.output(RED_PIN, GPIO.HIGH)
-    GPIO.output(GREEN_PIN, GPIO.HIGH)
-    GPIO.output(YELLOW_PIN, GPIO.HIGH)
-    GPIO.output(BUZZER_PIN, GPIO.HIGH)
+    GPIO.output(RED_PIN, GPIO.LOW)
+    GPIO.output(GREEN_PIN, GPIO.LOW)
+    GPIO.output(YELLOW_PIN, GPIO.LOW)
+    GPIO.output(BUZZER_PIN, GPIO.LOW)
 
     debug("🔌 GPIO initialized")
 
