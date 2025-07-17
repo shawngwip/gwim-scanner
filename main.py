@@ -244,7 +244,7 @@ def process_and_store(barcode, muf_info, remarks=''):
         conn = pymysql.connect(**MYSQL_CONFIG)
         cursor = conn.cursor()
         sql = (
-            "INSERT INTO output_test ("
+            "INSERT INTO output_log ("
             "muf_no, line, fg_no, pack_per_ctn, pack_per_hr, actual_pack, "
             "ctn_count, scanned_code, scanned_count, scanned_at, scanned_by, remarks"
             ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -286,7 +286,7 @@ def upload_from_csv():
             cursor = conn.cursor()
             for row in rows:
                 sql = (
-                    "INSERT INTO output_test ("
+                    "INSERT INTO output_log ("
                     "muf_no, line, fg_no, pack_per_ctn, pack_per_hr, actual_pack, "
                     "ctn_count, scanned_code, scanned_count, scanned_at, scanned_by, remarks"
                     ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
