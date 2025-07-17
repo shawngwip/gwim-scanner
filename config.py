@@ -5,4 +5,4 @@ MYSQL_CONFIG = {
     "database": "production" # production-testing
 }
 DEVICE_LINE = "HF1" # Change for each production line
-DEVICE_ID = "RPI-TEST-01" # Change for each raspberry pi device
+DEVICE_ID = "RPI-01-HF" # Change for each raspberry pi device
