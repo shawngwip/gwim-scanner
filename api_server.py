@@ -5,9 +5,6 @@ from contextlib import contextmanager
 
 app = Flask(__name__)
 
-# === Configuration ===
-LINE_NAME = 'HF1'
-
 def connect_production_db():
     return mysql.connector.connect(
         host="149.28.152.191",
@@ -27,7 +24,7 @@ def get_cursor(dict_mode=False):
         cursor.close()
         conn.close()
 
-def query_database():
+def query_database(line):
     try:
         with get_cursor(dict_mode=True) as cursor:
             cursor.execute("""
@@ -35,7 +32,7 @@ def query_database():
                             WHERE muf_no IS NOT NULL AND muf_no != '' AND line = %s
                             ORDER BY id DESC
                             LIMIT 1
-                        """, (LINE_NAME,))
+                        """, (line,))
             result = cursor.fetchone()
             return result if result else {"message": "No recent muf_no found"}
 
@@ -68,7 +65,7 @@ def get_output_info(muf_no):
         return main_data
 
 
-def get_average_hourly_output(muf_no, line=LINE_NAME):
+def get_average_hourly_output(muf_no, line):
     try:
         now = dt.now()
         hour_start = now.replace(minute=1, second=0, microsecond=0)
@@ -96,9 +93,9 @@ def get_query():
     else:
         return "No WIP found"
 
-@app.route('/summary', methods=['GET'])
-def get_summary():
-    data = query_database()
+@app.route('/summary/<line>', methods=['GET'])
+def get_summary(line):
+    data = query_database(line)
     if not isinstance(data, dict) or "muf_no" not in data:
         return jsonify({"error": "No WIP muf_no found"}), 404
 
@@ -118,7 +115,7 @@ def get_summary():
         "muf_no": muf_no,
         "total_carton_needed": qty_done,
         "target_hour": int(pack_per_hr // pack_per_ctn),
-        "avg_hourly_output": get_average_hourly_output(muf_no),
+        "avg_hourly_output": get_average_hourly_output(muf_no, line),
         "balance_carton": balance_cartons,
         "balance_hours": balance_hours
     }
